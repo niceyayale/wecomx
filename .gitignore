@@ -1,0 +1,5 @@
+wecomchan
+*.env
+.env
+.env.*
+!wecomchan.env.example
