@@ -1,33 +1,60 @@
 # WeComX deployment
 
-This setup intentionally avoids Docker and Redis. The service is a single Go binary supervised by systemd.
+WeComX is derived from the open-source wecomchan project by easychen:
+https://github.com/easychen/wecomchan
 
-## Build on VPS
+## Build on the VPS
 
+    git clone https://github.com/niceyayale/wecomx.git
+    cd wecomx
     sudo apt-get update
     sudo apt-get install -y golang-go
-    cd ~/wecomx
+    chmod +x build.sh install-wecomchan.sh
     ./build.sh
 
-For the current x86_64 Oracle VPS this produces an amd64 Linux binary.
+## Configure
+
+Create /etc/wecomchan.env with the real enterprise credentials. Keep this file private:
+
+    sudo chmod 600 /etc/wecomchan.env
+
+Do not put real SENDKEY, WECOM_SECRET, callback Token, callback EncodingAESKey, or access tokens in Git.
 
 ## Install
 
     sudo ./install-wecomchan.sh ./wecomchan
-    sudo nano /etc/wecomchan.env
-    sudo chmod 600 /etc/wecomchan.env
     sudo systemctl restart wecomchan
 
-Required variables: SENDKEY, WECOM_CID, WECOM_SECRET, WECOM_AID, WECOM_TOUID.
+## Public callback
 
-Check: `sudo systemctl status wecomchan`, `curl http://127.0.0.1:8080/health`.
+The WeCom callback endpoint is:
+
+    http://YOUR_PUBLIC_IP:28473/hook_path
+
+Configure it in the WeCom application as required by the standard callback verification flow.
 
 ## Cloudflare Tunnel
 
-Public path: `https://push.example.com -> Cloudflare Tunnel -> http://127.0.0.1:8080`.
+Recommended public sender endpoint:
 
-No public inbound port 8080 is required.
+    https://push.example.com/wecomchan
+        -> Cloudflare Tunnel
+        -> http://127.0.0.1:8080
+        -> WeComX
 
-## Security
+No public inbound 8080 is required.
 
-Keep `/etc/wecomchan.env` at mode 0600. Never commit WeCom credentials. Use a long random SENDKEY. Keep port 8080 bound to localhost. Prefer Bearer authentication. Keep this VPS separate from VPN/proxy workloads when its public IP is important.
+TCP 28473 is separate from the push API and can remain enabled for the WeCom callback.
+
+## Runtime hardening
+
+The service runs as the unprivileged wecomchan account with systemd sandboxing.
+
+The callback listener uses:
+- 16 KB maximum HTTP headers
+- 128 KB maximum callback body
+- strict read/write/idle timeouts
+- timestamp validation with a ±5 minute window
+- constant-time signature comparison
+
+The callback endpoint performs verification/decryption only and has no shell, file upload, database, or command execution interface.
